@@ -1,0 +1,87 @@
+version: '3.9'
+
+services:
+  portainer:
+    image: portainer/portainer-ce:2.19.1-alpine
+    command: -H tcp://portainer-socket-proxy:2375
+    restart: always
+    security_opt:
+      - 'no-new-privileges:true'
+    volumes:
+      - './Data:/data'
+    networks:
+      - traefik-proxy
+      - default
+    ports:
+      - '9000:9000'
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.${PROJECT_IDENTIFIER}.tls=true'
+      - 'traefik.http.routers.${PROJECT_IDENTIFIER}.entrypoints=https'
+      - 'traefik.http.routers.${PROJECT_IDENTIFIER}.rule=Host(`${PORTAINER_FQDN}`)'
+      #- 'traefik.http.routers.${PROJECT_IDENTIFIER}.middlewares=middlewares-authentik@file'
+      - 'traefik.http.routers.${PROJECT_IDENTIFIER}.service=${PROJECT_IDENTIFIER}'
+      - 'traefik.http.services.${PROJECT_IDENTIFIER}.loadbalancer.server.port=9000'
+
+  # Docker Socket Proxy - Security Enhanced Proxy for Docker Socket
+  portainer-socket-proxy:
+    image: tecnativa/docker-socket-proxy:0.1.1
+    security_opt:
+      - 'no-new-privileges:true'
+    restart: always
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
+    environment:
+      - LOG_LEVEL=info # debug,info,notice,warning,err,crit,alert,emerg
+      ## Variables match the URL prefix (i.e. AUTH blocks access to /auth/* parts of the API, etc.).
+      # 0 to revoke access.
+      # 1 to grant access.
+      ## Granted by Default
+      - EVENTS=1
+      - PING=1
+      - VERSION=1
+      ## Revoked by Default
+      # Security critical
+      - AUTH=0
+      - SECRETS=1
+      - POST=1
+      - DELETE=1 # portainer
+      # Not always needed
+      - BUILD=0
+      - COMMIT=0
+      - CONFIGS=0
+      - CONTAINERS=1 # required
+      - DISTRIBUTION=0
+      - EXEC=1 # required
+      - IMAGES=1 # required
+      - INFO=1 # required
+      - NETWORKS=1 # required
+      - NODES=0
+      - PLUGINS=0
+      - SERVICES=1 # required
+      - SESSION=0
+      - SWARM=0
+      - SYSTEM=0
+      - TASKS=1 # required
+      - VOLUMES=1 # required
+      - CONTAINERS_CREATE=1 # required
+      - CONTAINERS_START=1 # required
+      - CONTAINERS_UPDATE=1 # required
+      # DELETE Options
+      - CONTAINERS_DELETE=1 # required
+      - IMAGES_DELETE=1 # required
+    healthcheck:
+      test: 'wget --spider http://localhost:2375/version || exit 1'
+      interval: "29s"
+      timeout: "5s"
+      retries: 3
+      start_period: "21s"
+
+networks:
+  traefik-proxy:
+    name: traefik-proxy
+    driver: bridge
+    external: true
+  default:
+    name: '${PROJECT_IDENTIFIER}'
+    driver: bridge
